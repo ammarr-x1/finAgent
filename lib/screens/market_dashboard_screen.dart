@@ -22,9 +22,16 @@ class MarketDashboardScreen extends StatelessWidget {
   final double sp500;
   final double oilWti;
   final double vix;
+  final double sp500Change;
+  final double oilWtiChange;
+  final double vixChange;
   final bool isRebalanced;
   final String currentTime;
   final VoidCallback runAgent;
+  final List<String> headlines;
+  final List<AlertNotification> alerts;
+  final Map<String, dynamic> executionData;
+  final Map<String, dynamic> insight;
 
   const MarketDashboardScreen({
     Key? key,
@@ -32,20 +39,141 @@ class MarketDashboardScreen extends StatelessWidget {
     required this.sp500,
     required this.oilWti,
     required this.vix,
+    required this.sp500Change,
+    required this.oilWtiChange,
+    required this.vixChange,
     required this.isRebalanced,
     required this.currentTime,
     required this.runAgent,
+    required this.headlines,
+    required this.alerts,
+    required this.executionData,
+    required this.insight,
   }) : super(key: key);
+
+  Color _getAssetColor(String asset) {
+    final upper = asset.toUpperCase();
+    if (upper.contains("LOGISTICS") || upper.contains("XYZ") || upper.contains("FDX")) {
+      return AppColors.dangerRed;
+    } else if (upper.contains("ENERGY") || upper.contains("OIL") || upper.contains("XOM")) {
+      return AppColors.neonGreen;
+    } else if (upper.contains("TECH") || upper.contains("AAPL")) {
+      return AppColors.electricCyan;
+    }
+    // Fallbacks
+    final hash = asset.hashCode.abs();
+    final list = [
+      AppColors.electricCyan,
+      AppColors.neonGreen,
+      AppColors.dangerRed,
+      Colors.amberAccent,
+      Colors.purpleAccent,
+      Colors.orangeAccent,
+    ];
+    return list[hash % list.length];
+  }
+
+  String _formatAssetName(String asset) {
+    if (asset == "VTI") return "Total Stock Market (VTI)";
+    if (asset == "AAPL") return "Apple Inc (AAPL)";
+    if (asset == "FDX") return "FedEx Corp (FDX)";
+    if (asset == "XOM") return "Exxon Mobil (XOM)";
+    if (asset == "CASH") return "Cash";
+    final parts = asset.split("_");
+    return parts.map((p) {
+      if (p.isEmpty) return "";
+      return p[0].toUpperCase() + p.substring(1).toLowerCase();
+    }).join(" ");
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final headlines = [
-      "Oil prices surge 18% amid geopolitical tensions in the Middle East",
-      "Fed signals potential interest rate hike to cool inflation",
-      "NASDAQ composite drops 2.3% as tech sector valuations adjust",
-      "Retail sales index rises higher than forecast in Q2 review",
-    ];
+    
+    final activeMap = (isRebalanced
+        ? (executionData["portfolio_after"] as Map<String, dynamic>? ?? {})
+        : (executionData["portfolio_before"] as Map<String, dynamic>? ?? {}));
+
+    final sections = <PieChartSectionData>[];
+    final legends = <Widget>[];
+
+    activeMap.forEach((key, val) {
+      final pct = (val["allocation_pct"] as num?)?.toDouble() ?? 0.0;
+      final name = _formatAssetName(key);
+      final color = _getAssetColor(key);
+      
+      sections.add(PieChartSectionData(
+        color: color,
+        value: pct,
+        title: '${pct.toStringAsFixed(0)}%',
+        radius: 30,
+        titleStyle: GoogleFonts.spaceGrotesk(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ));
+
+      if (legends.isNotEmpty) {
+        legends.add(const SizedBox(height: 6));
+      }
+      legends.add(_buildLegendRow(
+        color,
+        name,
+        '${pct.toStringAsFixed(0)}%',
+      ));
+    });
+
+    if (sections.isEmpty) {
+      final defaultList = isRebalanced
+          ? [
+              {"asset": "FDX", "pct": 15.0, "color": AppColors.dangerRed},
+              {"asset": "XOM", "pct": 40.0, "color": AppColors.neonGreen},
+              {"asset": "AAPL", "pct": 30.0, "color": AppColors.electricCyan},
+              {"asset": "CASH", "pct": 15.0, "color": Colors.amberAccent},
+            ]
+          : [
+              {"asset": "FDX", "pct": 35.0, "color": AppColors.dangerRed},
+              {"asset": "XOM", "pct": 20.0, "color": AppColors.neonGreen},
+              {"asset": "AAPL", "pct": 30.0, "color": AppColors.electricCyan},
+              {"asset": "CASH", "pct": 15.0, "color": Colors.amberAccent},
+            ];
+
+      for (var item in defaultList) {
+        final pct = item["pct"] as double;
+        final name = _formatAssetName(item["asset"] as String);
+        final color = item["color"] as Color;
+
+        sections.add(PieChartSectionData(
+          color: color,
+          value: pct,
+          title: '${pct.toStringAsFixed(0)}%',
+          radius: 30,
+          titleStyle: GoogleFonts.spaceGrotesk(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ));
+
+        if (legends.isNotEmpty) {
+          legends.add(const SizedBox(height: 6));
+        }
+        legends.add(_buildLegendRow(
+          color,
+          name,
+          '${pct.toStringAsFixed(0)}%',
+        ));
+      }
+    }
+    final displayHeadlines = headlines.isNotEmpty
+        ? headlines
+        : [
+            "Oil prices surge 18% amid geopolitical tensions in the Middle East",
+            "Fed signals potential interest rate hike to cool inflation",
+            "NASDAQ composite drops 2.3% as tech sector valuations adjust",
+            "Retail sales index rises higher than forecast in Q2 review",
+          ];
 
     return Scaffold(
       appBar: AppBar(
@@ -122,7 +250,7 @@ class MarketDashboardScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Breaking news ticker scroller
-              NewsTicker(headlines: headlines),
+              NewsTicker(headlines: displayHeadlines),
               const SizedBox(height: 16),
 
               // 3 Market Indicator cards
@@ -135,8 +263,8 @@ class MarketDashboardScreen extends StatelessWidget {
                         context,
                         "S&P 500",
                         sp500.toStringAsFixed(1),
-                        "▲ +1.2%",
-                        AppColors.neonGreen,
+                        "${sp500Change >= 0 ? "▲" : "▼"} ${sp500Change >= 0 ? "+" : ""}${sp500Change.toStringAsFixed(2)}%",
+                        sp500Change >= 0 ? AppColors.neonGreen : AppColors.dangerRed,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -145,8 +273,8 @@ class MarketDashboardScreen extends StatelessWidget {
                         context,
                         "Oil/WTI",
                         "\$${oilWti.toStringAsFixed(2)}",
-                        "▲ +18.0%",
-                        AppColors.warningAmber,
+                        "${oilWtiChange >= 0 ? "▲" : "▼"} ${oilWtiChange >= 0 ? "+" : ""}${oilWtiChange.toStringAsFixed(1)}%",
+                        oilWtiChange >= 0 ? AppColors.warningAmber : AppColors.dangerRed,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -155,8 +283,8 @@ class MarketDashboardScreen extends StatelessWidget {
                         context,
                         "VIX Fear Index",
                         vix.toStringAsFixed(1),
-                        "HIGH RISK",
-                        AppColors.dangerRed,
+                        vixChange >= 0 ? "HIGH RISK" : "STABLE",
+                        vixChange >= 0 ? AppColors.dangerRed : AppColors.neonGreen,
                       ),
                     ),
                   ],
@@ -237,83 +365,7 @@ class MarketDashboardScreen extends StatelessWidget {
                                 PieChartData(
                                   sectionsSpace: 3,
                                   centerSpaceRadius: 28,
-                                  sections: isRebalanced
-                                      ? [
-                                          PieChartSectionData(
-                                            color: AppColors.dangerRed,
-                                            value: 15,
-                                            title: '15%',
-                                            radius: 30,
-                                            titleStyle:
-                                                GoogleFonts.spaceGrotesk(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          PieChartSectionData(
-                                            color: AppColors.neonGreen,
-                                            value: 40,
-                                            title: '40%',
-                                            radius: 30,
-                                            titleStyle:
-                                                GoogleFonts.spaceGrotesk(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          PieChartSectionData(
-                                            color: AppColors.electricCyan,
-                                            value: 45,
-                                            title: '45%',
-                                            radius: 30,
-                                            titleStyle:
-                                                GoogleFonts.spaceGrotesk(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ]
-                                      : [
-                                          PieChartSectionData(
-                                            color: AppColors.dangerRed,
-                                            value: 35,
-                                            title: '35%',
-                                            radius: 30,
-                                            titleStyle:
-                                                GoogleFonts.spaceGrotesk(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          PieChartSectionData(
-                                            color: AppColors.neonGreen,
-                                            value: 20,
-                                            title: '20%',
-                                            radius: 30,
-                                            titleStyle:
-                                                GoogleFonts.spaceGrotesk(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          PieChartSectionData(
-                                            color: AppColors.electricCyan,
-                                            value: 45,
-                                            title: '45%',
-                                            radius: 30,
-                                            titleStyle:
-                                                GoogleFonts.spaceGrotesk(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
+                                  sections: sections,
                                 ),
                               ),
                             ),
@@ -323,25 +375,7 @@ class MarketDashboardScreen extends StatelessWidget {
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildLegendRow(
-                                    AppColors.dangerRed,
-                                    "XYZ Logistics",
-                                    isRebalanced ? "15%" : "35%",
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildLegendRow(
-                                    AppColors.neonGreen,
-                                    "Energy Hedging",
-                                    isRebalanced ? "40%" : "20%",
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildLegendRow(
-                                    AppColors.electricCyan,
-                                    "Tech Index ETF",
-                                    "45%",
-                                  ),
-                                ],
+                                children: legends,
                               ),
                             )
                           ],
@@ -387,32 +421,36 @@ class MarketDashboardScreen extends StatelessWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 children: [
-                  _buildInsightItem(
-                    context,
-                    "🤖 Transportation sector at elevated risk",
-                    "Surging oil prices are directly damaging transport logistics operations. Exposure mitigations initialized automatically.",
-                    "HIGH",
-                    AppColors.dangerRed,
-                    "3m ago",
-                  ),
-                  const SizedBox(height: 10),
-                  _buildInsightItem(
-                    context,
-                    "⚡ Energy assets outperformance predicted",
-                    "OPEC output constraints will keep crude values elevated, triggering strong momentum gains in oil ETFs.",
-                    "MED",
-                    AppColors.warningAmber,
-                    "15m ago",
-                  ),
-                  const SizedBox(height: 10),
-                  _buildInsightItem(
-                    context,
-                    "📉 Technology valuations hold support",
-                    "Tech index ETF maintains solid levels despite volatility, representing robust portfolio stability.",
-                    "LOW",
-                    AppColors.electricCyan,
-                    "44m ago",
-                  ),
+                  if (alerts.isNotEmpty) ...[
+                    for (int i = 0; i < alerts.length; i++) ...[
+                      (() {
+                        final a = alerts[i];
+                        final prefix = a.severity == "CRITICAL" ? "🚨 " : (a.severity == "WARNING" ? "⚠️ " : "🤖 ");
+                        return _buildInsightItem(
+                          context,
+                          "$prefix${a.title}",
+                          a.body,
+                          a.severity,
+                          a.severityColor,
+                          a.time,
+                        );
+                      })(),
+                      if (i < alerts.length - 1) const SizedBox(height: 10),
+                    ]
+                  ] else ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          "No AI Insights generated yet. Run Agent Analysis.",
+                          style: GoogleFonts.spaceGrotesk(
+                            color: isDark ? AppColors.greyText : AppColors.greyTextLight,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 100), // padding bottom for fab spacing
@@ -585,4 +623,5 @@ class MarketDashboardScreen extends StatelessWidget {
         ],
       ),
     );
+  }
 }

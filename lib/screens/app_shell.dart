@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +19,8 @@ import 'insight_details_screen.dart';
 import 'trade_simulation_screen.dart';
 import 'analytics_screen.dart';
 import 'alerts_screen.dart';
+import '../services/api_service.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 // ==========================================
 // MAIN APP SHELL WITH STATE MANAGEMENT
@@ -37,9 +40,12 @@ class _AppShellState extends State<AppShell>
   // Real-time fluctuating ticker states
   late Timer _marketTimer;
   double _portfolioValue = 124500.00;
-  double _sp500 = 5234.15;
-  double _oilWti = 94.50;
-  double _vix = 28.40;
+  double _sp500 = 7354.95;
+  double _oilWti = 102.20;
+  double _vix = 17.93;
+  double _sp500Change = 1.20;
+  double _oilWtiChange = 18.00;
+  double _vixChange = 4.30;
 
   // AI Agent States
   bool _isRebalanced = false; // Before vs After Trade Rebalance
@@ -47,6 +53,46 @@ class _AppShellState extends State<AppShell>
   int _traceProgressCount = 7; // Completed initially, can be replayed
   late List<TraceStep> _traceSteps;
   late List<AlertNotification> _alerts;
+  List<String> _headlines = [];
+  List<dynamic> _trades = [];
+  Map<String, dynamic> _activeInsight = {
+    "summary": "Rising oil prices combined with negative transportation sentiment will reduce logistics profitability significantly.",
+    "severity": "HIGH",
+    "sector_focus": "transportation",
+    "confidence": 0.91,
+    "tags": ["Crude Oil", "Logistics Beta", "OPEC Cuts", "Freight Fuel", "Supply Hedge", "Inflation"],
+    "affected_negative_sectors": ["Transportation", "Logistics"],
+    "affected_positive_sectors": ["Energy", "Oil ETFs"],
+    "sentiment_score": -0.76,
+  };
+
+  Map<String, dynamic> _executionData = {
+    "trades": [],
+    "portfolio_before": {
+      "FDX": {"allocation_pct": 35.0, "value": 35000.0},
+      "XOM": {"allocation_pct": 20.0, "value": 20000.0},
+      "AAPL": {"allocation_pct": 30.0, "value": 30000.0},
+      "CASH": {"allocation_pct": 15.0, "value": 15000.0}
+    },
+    "portfolio_after": {
+      "FDX": {"allocation_pct": 15.0, "value": 15000.0},
+      "XOM": {"allocation_pct": 40.0, "value": 40000.0},
+      "AAPL": {"allocation_pct": 30.0, "value": 30000.0},
+      "CASH": {"allocation_pct": 15.0, "value": 15000.0}
+    },
+    "metrics": {
+      "risk_reduction": "9.0%",
+      "volatility_delta": "-0.43",
+      "hedging_efficiency": "97.4%"
+    }
+  };
+
+  Map<String, dynamic> _riskData = {
+    "risk_score": 0.86,
+    "risk_label": "HIGH",
+    "exposure_pct": 35.0,
+    "exposure_value": 35000.0,
+  };
 
   // Clock state
   String _currentTime = "";
@@ -61,6 +107,13 @@ class _AppShellState extends State<AppShell>
       step.isCompleted = true; // Initially complete
     }
 
+    _headlines = [
+      "Oil prices surge 18% amid geopolitical tensions in the Middle East",
+      "Fed signals potential interest rate hike to cool inflation",
+      "NASDAQ composite drops 2.3% as tech sector valuations adjust",
+      "Retail sales index rises higher than forecast in Q2 review",
+    ];
+
     _alerts = _createInitialAlerts();
 
     // Clock update
@@ -68,6 +121,9 @@ class _AppShellState extends State<AppShell>
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateClock();
     });
+
+    // Load actual stock / portfolio values from backend
+    _loadInitialData();
 
     // Market ticker fluctuation simulations
     _marketTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
@@ -88,6 +144,71 @@ class _AppShellState extends State<AppShell>
         });
       }
     });
+  }
+
+  void _loadInitialData() async {
+    try {
+      final data = await ApiService.getPortfolio();
+      if (data != null && data["portfolio"] != null) {
+        final port = data["portfolio"];
+        final holdings = port["holdings"] as Map<String, dynamic>?;
+        double totalVal = 0.0;
+        if (holdings != null) {
+          holdings.forEach((key, value) {
+            totalVal += (value["value"] ?? 0.0);
+          });
+        }
+        if (mounted) {
+          setState(() {
+            if (totalVal > 0) {
+              _portfolioValue = totalVal;
+            }
+          });
+        }
+      }
+
+      // Fetch live news headlines on startup
+      final liveHeadlines = await ApiService.getLiveNewsHeadlines();
+      if (liveHeadlines.isNotEmpty && mounted) {
+        setState(() {
+          _headlines = liveHeadlines;
+        });
+      }
+
+      // Fetch live market prices on startup
+      final livePrices = await ApiService.getMarketPrices();
+      if (livePrices != null && mounted) {
+        setState(() {
+          _sp500 = (livePrices["SP500"] as num?)?.toDouble() ?? _sp500;
+          _oilWti = (livePrices["OIL_WTI"] as num?)?.toDouble() ?? _oilWti;
+          _vix = (livePrices["VIX"] as num?)?.toDouble() ?? _vix;
+          _sp500Change = (livePrices["SP500_change"] as num?)?.toDouble() ?? _sp500Change;
+          _oilWtiChange = (livePrices["OIL_WTI_change"] as num?)?.toDouble() ?? _oilWtiChange;
+          _vixChange = (livePrices["VIX_change"] as num?)?.toDouble() ?? _vixChange;
+        });
+      }
+      // Fetch latest AI insight details on startup
+      final liveInsight = await ApiService.getLatestInsight();
+      if (liveInsight != null && mounted) {
+        setState(() {
+          _activeInsight = liveInsight;
+        });
+      }
+      // Fetch latest execution details on startup
+      final liveExec = await ApiService.getLatestExecution();
+      if (liveExec != null && mounted) {
+        setState(() {
+          _executionData = liveExec;
+          final liveTrades = liveExec["trades"] as List<dynamic>?;
+          if (liveTrades != null && liveTrades.isNotEmpty) {
+            _trades = liveTrades;
+            _isRebalanced = true;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading initial data: $e");
+    }
   }
 
   void _updateClock() {
@@ -209,18 +330,264 @@ class _AppShellState extends State<AppShell>
   }
 
   // Action to Run / Replay autonomous AI execution sequence
-  void _runAgentAnalysis() {
+  void _runAgentAnalysis() async {
     setState(() {
       _currentIndex = 1; // Direct navigate to execution trace tab
       _pageController.jumpToPage(1);
       _isTraceRunning = true;
       _traceProgressCount = 0;
+      _trades = [];
       _isRebalanced = false; // Reset to BEFORE portfolio value first
       for (var step in _traceSteps) {
         step.isCompleted = false;
       }
     });
 
+    // Start connection to WebSocket stream to receive updates
+    WebSocketChannel? channel;
+    try {
+      channel = ApiService.connectWebSocket();
+    } catch (e) {
+      debugPrint("WebSocket Connection error: $e");
+    }
+
+    // Trigger the real FastAPI pipeline execution in background
+    final runId = await ApiService.triggerPipeline();
+    debugPrint("Triggered backend pipeline, Run ID: $runId");
+
+    // Listen to WebSocket events
+    bool receivedLiveProgress = false;
+    if (channel != null) {
+      channel.stream.listen((event) {
+        try {
+          final data = jsonDecode(event);
+          if (data["type"] == "agent_progress") {
+            receivedLiveProgress = true;
+            final traceLog = data["trace_log"] as List<dynamic>?;
+            if (traceLog != null) {
+              _parseTraceLog(traceLog);
+              setState(() {
+                _traceProgressCount = traceLog.length;
+              });
+            }
+
+            final execution = data["execution"] as Map<String, dynamic>?;
+            if (execution != null && execution.isNotEmpty) {
+              final liveTrades = execution["trades"] as List<dynamic>?;
+              setState(() {
+                _executionData = execution;
+                if (liveTrades != null && liveTrades.isNotEmpty) {
+                  _trades = liveTrades;
+                  _isRebalanced = true;
+                }
+              });
+            }
+
+            final insight = data["insight"] as Map<String, dynamic>?;
+            if (insight != null && insight.isNotEmpty) {
+              setState(() {
+                _activeInsight = insight;
+              });
+            }
+
+            final risk = data["risk"] as Map<String, dynamic>?;
+            if (risk != null && risk.isNotEmpty) {
+              setState(() {
+                _riskData = risk;
+              });
+            }
+          }
+
+          if (data["type"] == "pipeline_complete") {
+            debugPrint("Pipeline complete received over WebSocket!");
+            receivedLiveProgress = true;
+            
+            // Extract prices and percentage changes
+            final traceLog = data["trace_log"] as List<dynamic>?;
+            if (traceLog != null && traceLog.isNotEmpty) {
+              final firstStep = traceLog[0]["output_contract"] as Map<String, dynamic>?;
+              if (firstStep != null) {
+                final prices = firstStep["market_prices"] as Map<String, dynamic>?;
+                if (prices != null) {
+                  setState(() {
+                    _sp500 = (prices["SP500"] as num?)?.toDouble() ?? _sp500;
+                    _oilWti = (prices["OIL_WTI"] as num?)?.toDouble() ?? _oilWti;
+                    _vix = (prices["VIX"] as num?)?.toDouble() ?? _vix;
+                    _sp500Change = (prices["SP500_change"] as num?)?.toDouble() ?? _sp500Change;
+                    _oilWtiChange = (prices["OIL_WTI_change"] as num?)?.toDouble() ?? _oilWtiChange;
+                    _vixChange = (prices["VIX_change"] as num?)?.toDouble() ?? _vixChange;
+                  });
+                }
+              }
+            }
+
+            // Extract headlines
+            final headlines = data["headlines"] as List<dynamic>?;
+            if (headlines != null) {
+              setState(() {
+                _headlines = headlines.map((e) => e.toString()).toList();
+              });
+            }
+
+            // Extract live trades from execution context
+            final execution = data["execution"] as Map<String, dynamic>?;
+            if (execution != null) {
+              final liveTrades = execution["trades"] as List<dynamic>?;
+              setState(() {
+                _executionData = execution;
+                if (liveTrades != null && liveTrades.isNotEmpty) {
+                  _trades = liveTrades;
+                  _isRebalanced = true;
+                }
+              });
+            }
+
+            // Extract live insight summary details
+            final insight = data["insight"] as Map<String, dynamic>?;
+            if (insight != null) {
+              setState(() {
+                _activeInsight = insight;
+              });
+            }
+
+            final risk = data["risk"] as Map<String, dynamic>?;
+            if (risk != null && risk.isNotEmpty) {
+              setState(() {
+                _riskData = risk;
+              });
+            }
+
+            // Parse trace log into live steps
+            _parseTraceLog(traceLog);
+
+            // Parse notifications
+            final notifs = data["notifications"] as List<dynamic>?;
+            if (notifs != null) {
+              _parseNotifications(notifs);
+            }
+
+            setState(() {
+              if (traceLog != null) {
+                _traceProgressCount = traceLog.length;
+              }
+              _isTraceRunning = false;
+            });
+            channel?.sink.close();
+          }
+        } catch (e) {
+          debugPrint("Error parsing WebSocket event: $e");
+        }
+      }, onError: (err) {
+        debugPrint("WebSocket stream error: $err");
+        if (!receivedLiveProgress) {
+          _animateTraceProgress(); // Fallback to visual animation anyway
+        }
+      }, onDone: () {
+        debugPrint("WebSocket stream closed");
+        if (!receivedLiveProgress) {
+          _animateTraceProgress(); // Fallback if no real-time events were received
+        }
+      });
+    } else {
+      // Fallback if WebSocket is not reachable (offline/mock)
+      _animateTraceProgress();
+    }
+  }
+
+  void _parseTraceLog(List<dynamic>? traceLog) {
+    if (traceLog == null || traceLog.isEmpty) return;
+
+    final colors = [
+      AppColors.electricCyan,
+      AppColors.warningAmber,
+      AppColors.warningAmber,
+      AppColors.dangerRed,
+      AppColors.warningAmber,
+      AppColors.neonGreen,
+      AppColors.neonGreen,
+      AppColors.neonGreen,
+    ];
+
+    final List<TraceStep> parsedSteps = [];
+    for (int i = 0; i < traceLog.length; i++) {
+      final step = traceLog[i];
+      final agentId = step["agent_id"] ?? "AI Agent";
+      final status = step["status"] ?? "COMPLETED";
+      final logs = step["reasoning_log"] as List<dynamic>? ?? [];
+      final reasoning = logs.isNotEmpty 
+          ? logs.join(" ") 
+          : "Processed signals successfully and published output contract.";
+      
+      final startTimeStr = step["start_time"] ?? "";
+      String timeStr = "10:00:00";
+      if (startTimeStr.isNotEmpty) {
+        try {
+          final dt = DateTime.parse(startTimeStr).toLocal();
+          timeStr = "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
+        } catch (_) {}
+      }
+
+      parsedSteps.add(TraceStep(
+        time: timeStr,
+        agentName: agentId,
+        status: status,
+        reasoning: reasoning,
+        color: colors[i % colors.length],
+        isCompleted: false,
+      ));
+    }
+
+    if (parsedSteps.isNotEmpty) {
+      setState(() {
+        _traceSteps = parsedSteps;
+      });
+    }
+  }
+
+  void _parseNotifications(List<dynamic> notifs) {
+    final List<AlertNotification> parsedAlerts = [];
+    for (var n in notifs) {
+      IconData icon = Icons.info_outline;
+      final iconStr = n["icon"] ?? "";
+      if (iconStr == "error_outline") {
+        icon = Icons.error_outline_rounded;
+      } else if (iconStr == "swap_horizontal_circle") {
+        icon = Icons.swap_horizontal_circle_rounded;
+      } else if (iconStr == "check_circle_outline") {
+        icon = Icons.check_circle_outline_rounded;
+      } else if (iconStr == "lightbulb_outline") {
+        icon = Icons.lightbulb_outline_rounded;
+      }
+
+      Color severityColor = AppColors.electricCyan;
+      final severity = n["severity"] ?? "INFO";
+      if (severity == "CRITICAL") {
+        severityColor = AppColors.dangerRed;
+      } else if (severity == "WARNING") {
+        severityColor = AppColors.warningAmber;
+      } else if (severity == "INFO") {
+        severityColor = AppColors.neonGreen;
+      }
+
+      parsedAlerts.add(AlertNotification(
+        icon: icon,
+        title: n["title"] ?? "Notification",
+        body: n["body"] ?? "",
+        time: n["timestamp"] ?? "Just Now",
+        severity: severity,
+        severityColor: severityColor,
+        isUnread: n["is_unread"] ?? true,
+      ));
+    }
+
+    if (parsedAlerts.isNotEmpty) {
+      setState(() {
+        _alerts = parsedAlerts;
+      });
+    }
+  }
+
+  void _animateTraceProgress() {
     int currentStep = 0;
     Timer.periodic(const Duration(milliseconds: 1400), (timer) {
       if (!mounted) {
@@ -233,27 +600,12 @@ class _AppShellState extends State<AppShell>
           _traceSteps[currentStep].isCompleted = true;
           _traceProgressCount = currentStep + 1;
 
-          // When Trade Simulation agent completes, rebalance portfolio!
+          // When Decision/Simulation completes, trigger portfolio rebalance state
           if (currentStep == 5) {
             _isRebalanced = true;
           }
 
-          // When Notification agent completes, mark system alerts as completed
-          if (currentStep == 6) {
-            // Prepend a fresh info notification to show real activity
-            _alerts.insert(
-              0,
-              AlertNotification(
-                icon: Icons.bolt_rounded,
-                title: "Live Analysis Complete",
-                body:
-                    "Autonomous Trace re-run completes. Risk score successfully validated and hedge confirmed.",
-                time: "Just Now",
-                severity: "INFO",
-                severityColor: AppColors.neonGreen,
-                isUnread: true,
-              ),
-            );
+          if (currentStep == _traceSteps.length - 1) {
             _isTraceRunning = false;
             timer.cancel();
           }
@@ -298,9 +650,16 @@ class _AppShellState extends State<AppShell>
             sp500: _sp500,
             oilWti: _oilWti,
             vix: _vix,
+            sp500Change: _sp500Change,
+            oilWtiChange: _oilWtiChange,
+            vixChange: _vixChange,
             isRebalanced: _isRebalanced,
             currentTime: _currentTime,
             runAgent: _runAgentAnalysis,
+            headlines: _headlines,
+            alerts: _alerts,
+            executionData: _executionData,
+            insight: _activeInsight,
           ),
           LiveAgentTraceScreen(
             steps: _traceSteps,
@@ -315,14 +674,21 @@ class _AppShellState extends State<AppShell>
                 _pageController.jumpToPage(3);
               });
             },
+            insight: _activeInsight,
           ),
           TradeSimulationScreen(
             isRebalanced: _isRebalanced,
             onToggleRebalance: _rebalanceManually,
+            trades: _trades,
+            executionData: _executionData,
           ),
-          AnalyticsScreen(
+           AnalyticsScreen(
             isRebalanced: _isRebalanced,
             portfolioValue: _portfolioValue,
+            vix: _vix,
+            vixChange: _vixChange,
+            executionData: _executionData,
+            riskData: _riskData,
           ),
           AlertsScreen(
             alerts: _alerts,

@@ -24,3 +24,9 @@ pubspec.lock
 .env
 .env.*
 .envrc
+
+# Secrets and credentials
+firebase_service_account.json
+backend/firebase_service_account.json
+*.pem
+*.key

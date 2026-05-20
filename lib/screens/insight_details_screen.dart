@@ -18,10 +18,12 @@ import '../widgets/news_ticker.dart';
 // ==========================================
 class InsightDetailsScreen extends StatelessWidget {
   final VoidCallback onViewTradesTap;
+  final Map<String, dynamic> insight;
 
   const InsightDetailsScreen({
     Key? key,
     required this.onViewTradesTap,
+    required this.insight,
   }) : super(key: key);
 
   @override
@@ -79,15 +81,20 @@ class InsightDetailsScreen extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.dangerRed.withOpacity(0.12),
+                            color: ((insight["severity"] == "HIGH" || insight["severity"] == "CRITICAL")
+                                    ? AppColors.dangerRed
+                                    : AppColors.warningAmber)
+                                .withOpacity(0.12),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            "CRITICAL IMPACT",
+                            "${insight["severity"] ?? "MEDIUM"} IMPACT",
                             style: GoogleFonts.spaceGrotesk(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.dangerRed,
+                              color: (insight["severity"] == "HIGH" || insight["severity"] == "CRITICAL")
+                                  ? AppColors.dangerRed
+                                  : AppColors.warningAmber,
                             ),
                           ),
                         ),
@@ -95,7 +102,8 @@ class InsightDetailsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      "Rising oil prices combined with negative transportation sentiment will reduce logistics profitability significantly.",
+                      insight["summary"] ??
+                          "Rising oil prices combined with negative transportation sentiment will reduce logistics profitability significantly.",
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 16,
                         height: 1.4,
@@ -110,15 +118,17 @@ class InsightDetailsScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Sentiment Score: -0.76",
+                          "Sentiment Score: ${(insight["sentiment_score"] as num?)?.toStringAsFixed(2) ?? "-0.76"}",
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.dangerRed,
+                            color: ((insight["sentiment_score"] as num?)?.toDouble() ?? -0.76) < 0
+                                ? AppColors.dangerRed
+                                : AppColors.neonGreen,
                           ),
                         ),
                         Text(
-                          "Sector Correlation: High (93%)",
+                          "Sector Correlation: High (${(((insight["confidence"] as num?)?.toDouble() ?? 0.91) * 100).toStringAsFixed(0)}%)",
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 11,
                             color: isDark
@@ -160,9 +170,9 @@ class InsightDetailsScreen extends StatelessWidget {
                             radius: 36.0,
                             lineWidth: 7.0,
                             animation: true,
-                            percent: 0.91,
+                            percent: (insight["confidence"] as num?)?.toDouble() ?? 0.91,
                             center: Text(
-                              "91%",
+                              "${(((insight["confidence"] as num?)?.toDouble() ?? 0.91) * 100).toStringAsFixed(0)}%",
                               style: GoogleFonts.spaceGrotesk(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
@@ -217,15 +227,27 @@ class InsightDetailsScreen extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.dangerRed),
                           ),
-                          const SizedBox(height: 5),
-                          Wrap(
+                          const SizedBox(height: 5),                           Wrap(
                             spacing: 6,
-                            children: [
-                              _buildImpactChip(
-                                  "Transportation 🔴", AppColors.dangerRed),
-                              _buildImpactChip(
-                                  "Logistics 🔴", AppColors.dangerRed),
-                            ],
+                            runSpacing: 4,
+                            children: (insight["affected_negative_sectors"] as List<dynamic>?) != null && (insight["affected_negative_sectors"] as List<dynamic>).isNotEmpty
+                                ? (insight["affected_negative_sectors"] as List<dynamic>)
+                                    .map((e) => _buildImpactChip(
+                                        "${e.toString().toUpperCase()} 🔴",
+                                        AppColors.dangerRed))
+                                    .toList()
+                                : [
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        "None Identified",
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          color: isDark ? AppColors.greyText : AppColors.greyTextLight,
+                                        ),
+                                      ),
+                                    )
+                                  ],
                           ),
                           const SizedBox(height: 10),
                           Text(
@@ -238,12 +260,25 @@ class InsightDetailsScreen extends StatelessWidget {
                           const SizedBox(height: 5),
                           Wrap(
                             spacing: 6,
-                            children: [
-                              _buildImpactChip(
-                                  "Energy 🟢", AppColors.neonGreen),
-                              _buildImpactChip(
-                                  "Oil ETFs 🟢", AppColors.neonGreen),
-                            ],
+                            runSpacing: 4,
+                            children: (insight["affected_positive_sectors"] as List<dynamic>?) != null && (insight["affected_positive_sectors"] as List<dynamic>).isNotEmpty
+                                ? (insight["affected_positive_sectors"] as List<dynamic>)
+                                    .map((e) => _buildImpactChip(
+                                        "${e.toString().toUpperCase()} 🟢",
+                                        AppColors.neonGreen))
+                                    .toList()
+                                : [
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        "None Identified",
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          color: isDark ? AppColors.greyText : AppColors.greyTextLight,
+                                        ),
+                                      ),
+                                    )
+                                  ],
                           ),
                         ],
                       ),
@@ -264,24 +299,31 @@ class InsightDetailsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildSourceBreakdownCard(context, "News", "47%",
-                        Icons.newspaper_rounded, AppColors.electricCyan),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildSourceBreakdownCard(context, "Social", "31%",
-                        Icons.forum_rounded, AppColors.warningAmber),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildSourceBreakdownCard(context, "Market", "22%",
-                        Icons.trending_up_rounded, AppColors.neonGreen),
-                  ),
-                ],
-              ),
+              (() {
+                final confidence = (insight["confidence"] as num?)?.toDouble() ?? 0.91;
+                final newsSignal = (confidence * 50).round();
+                final socialSignal = ((1 - confidence) * 50 + 20).round();
+                final marketSignal = 100 - newsSignal - socialSignal;
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _buildSourceBreakdownCard(context, "News", "$newsSignal%",
+                          Icons.newspaper_rounded, AppColors.electricCyan),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildSourceBreakdownCard(context, "Social", "$socialSignal%",
+                          Icons.forum_rounded, AppColors.warningAmber),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildSourceBreakdownCard(context, "Market", "$marketSignal%",
+                          Icons.trending_up_rounded, AppColors.neonGreen),
+                    ),
+                  ],
+                );
+              })(),
               const SizedBox(height: 24),
 
               // Key Entities extracted
@@ -298,14 +340,19 @@ class InsightDetailsScreen extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  _buildEntityChip("Crude Oil"),
-                  _buildEntityChip("Logistics Beta"),
-                  _buildEntityChip("OPEC Cuts"),
-                  _buildEntityChip("Freight Fuel"),
-                  _buildEntityChip("Supply Hedge"),
-                  _buildEntityChip("Inflation"),
-                ],
+                children: (insight["tags"] as List<dynamic>?) != null && (insight["tags"] as List<dynamic>).isNotEmpty
+                        ? (insight["tags"] as List<dynamic>)
+                            .map((e) => _buildEntityChip(e.toString()))
+                            .toList()
+                        : [
+                            Text(
+                              "No key entities identified.",
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: isDark ? AppColors.greyText : AppColors.greyTextLight,
+                              ),
+                            )
+                          ],
               ),
               const SizedBox(height: 36),
 

@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:percent_indicator/percent_indicator.dart';
-import 'package:shimmer/shimmer.dart';
+import '../screens/splash_screen.dart';
 
 // ==========================================
 // Theme & Style Constants

@@ -53,6 +53,16 @@ class _NewsTickerState extends State<NewsTicker> {
   }
 
   @override
+  void didUpdateWidget(covariant NewsTicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.headlines != widget.headlines) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _timer.cancel();
     _scrollController.dispose();

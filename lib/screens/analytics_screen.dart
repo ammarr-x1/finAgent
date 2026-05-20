@@ -19,16 +19,141 @@ import '../widgets/news_ticker.dart';
 class AnalyticsScreen extends StatelessWidget {
   final bool isRebalanced;
   final double portfolioValue;
+  final double vix;
+  final double vixChange;
+  final Map<String, dynamic> executionData;
+  final Map<String, dynamic> riskData;
 
   const AnalyticsScreen({
     Key? key,
     required this.isRebalanced,
     required this.portfolioValue,
+    required this.vix,
+    required this.vixChange,
+    required this.executionData,
+    required this.riskData,
   }) : super(key: key);
+
+  Color _getAssetColor(String asset) {
+    final upper = asset.toUpperCase();
+    if (upper.contains("LOGISTICS") || upper.contains("XYZ") || upper.contains("FDX")) {
+      return AppColors.dangerRed;
+    } else if (upper.contains("ENERGY") || upper.contains("OIL") || upper.contains("XOM")) {
+      return AppColors.neonGreen;
+    } else if (upper.contains("TECH") || upper.contains("AAPL")) {
+      return AppColors.electricCyan;
+    }
+    // Fallbacks
+    final hash = asset.hashCode.abs();
+    final list = [
+      AppColors.electricCyan,
+      AppColors.neonGreen,
+      AppColors.dangerRed,
+      Colors.amberAccent,
+      Colors.purpleAccent,
+      Colors.orangeAccent,
+    ];
+    return list[hash % list.length];
+  }
+
+  String _formatAssetName(String asset) {
+    if (asset == "VTI") return "Total Stock Market (VTI)";
+    if (asset == "AAPL") return "Apple Inc (AAPL)";
+    if (asset == "FDX") return "FedEx Corp (FDX)";
+    if (asset == "XOM") return "Exxon Mobil (XOM)";
+    if (asset == "CASH") return "Cash";
+    final parts = asset.split("_");
+    return parts.map((p) {
+      if (p.isEmpty) return "";
+      return p[0].toUpperCase() + p.substring(1).toLowerCase();
+    }).join(" ");
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final activeMap = (isRebalanced
+        ? (executionData["portfolio_after"] as Map<String, dynamic>? ?? {})
+        : (executionData["portfolio_before"] as Map<String, dynamic>? ?? {}));
+
+    final sections = <PieChartSectionData>[];
+    final labels = <Widget>[];
+
+    activeMap.forEach((key, val) {
+      final pct = (val["allocation_pct"] as num?)?.toDouble() ?? 0.0;
+      final color = _getAssetColor(key);
+
+      sections.add(PieChartSectionData(
+        color: color,
+        value: pct,
+        title: '${pct.toStringAsFixed(0)}%',
+        radius: 18,
+        titleStyle: const TextStyle(
+          fontSize: 7,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ));
+
+      String shortLabel = key;
+      if (key == "FDX") shortLabel = "Logi";
+      else if (key == "XOM") shortLabel = "Enrg";
+      else if (key == "AAPL") shortLabel = "Tech";
+      else if (key == "CASH") shortLabel = "Cash";
+
+      labels.add(_buildTinyDonutLabel(shortLabel, color));
+    });
+
+    if (sections.isEmpty) {
+      final defaultList = isRebalanced
+          ? [
+              {"asset": "Logi", "pct": 15.0, "color": AppColors.dangerRed},
+              {"asset": "Enrg", "pct": 40.0, "color": AppColors.neonGreen},
+              {"asset": "Tech", "pct": 30.0, "color": AppColors.electricCyan},
+              {"asset": "Cash", "pct": 15.0, "color": Colors.amberAccent},
+            ]
+          : [
+              {"asset": "Logi", "pct": 35.0, "color": AppColors.dangerRed},
+              {"asset": "Enrg", "pct": 20.0, "color": AppColors.neonGreen},
+              {"asset": "Tech", "pct": 30.0, "color": AppColors.electricCyan},
+              {"asset": "Cash", "pct": 15.0, "color": Colors.amberAccent},
+            ];
+
+      for (var item in defaultList) {
+        final pct = item["pct"] as double;
+        final asset = item["asset"] as String;
+        final color = item["color"] as Color;
+
+        sections.add(PieChartSectionData(
+          color: color,
+          value: pct,
+          title: '${pct.toStringAsFixed(0)}%',
+          radius: 18,
+          titleStyle: const TextStyle(
+            fontSize: 7,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ));
+
+        labels.add(_buildTinyDonutLabel(asset, color));
+      }
+    }
+
+    final rawScore = riskData["risk_score"] as num? ?? 0.86;
+    final currentRiskScorePct = (rawScore <= 1.0 ? rawScore * 100 : rawScore).toDouble();
+
+    double activeRiskScore = currentRiskScorePct;
+    if (isRebalanced) {
+      final reductionStr = executionData["metrics"]?["risk_reduction"] as String? ?? "9.0%";
+      final reduction = double.tryParse(reductionStr.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 9.0;
+      activeRiskScore = (currentRiskScorePct - reduction).clamp(0.0, 100.0);
+    }
+
+    final activeRiskColor = activeRiskScore > 75.0
+        ? AppColors.dangerRed
+        : (activeRiskScore > 40.0 ? AppColors.warningAmber : AppColors.neonGreen);
 
     return Scaffold(
       appBar: AppBar(
@@ -268,10 +393,8 @@ class AnalyticsScreen extends StatelessWidget {
                                   _buildBarGroup(5, 87, AppColors.dangerRed),
                                   _buildBarGroup(
                                       6,
-                                      isRebalanced ? 45 : 86,
-                                      isRebalanced
-                                          ? AppColors.warningAmber
-                                          : AppColors.dangerRed),
+                                      activeRiskScore,
+                                      activeRiskColor),
                                 ],
                               ),
                             ),
@@ -307,65 +430,7 @@ class AnalyticsScreen extends StatelessWidget {
                                   PieChartData(
                                     sectionsSpace: 2,
                                     centerSpaceRadius: 22,
-                                    sections: isRebalanced
-                                        ? [
-                                            PieChartSectionData(
-                                                color: AppColors.dangerRed,
-                                                value: 15,
-                                                title: '15%',
-                                                radius: 18,
-                                                titleStyle: const TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white)),
-                                            PieChartSectionData(
-                                                color: AppColors.neonGreen,
-                                                value: 40,
-                                                title: '40%',
-                                                radius: 18,
-                                                titleStyle: const TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white)),
-                                            PieChartSectionData(
-                                                color: AppColors.electricCyan,
-                                                value: 45,
-                                                title: '45%',
-                                                radius: 18,
-                                                titleStyle: const TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white)),
-                                          ]
-                                        : [
-                                            PieChartSectionData(
-                                                color: AppColors.dangerRed,
-                                                value: 35,
-                                                title: '35%',
-                                                radius: 18,
-                                                titleStyle: const TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white)),
-                                            PieChartSectionData(
-                                                color: AppColors.neonGreen,
-                                                value: 20,
-                                                title: '20%',
-                                                radius: 18,
-                                                titleStyle: const TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white)),
-                                            PieChartSectionData(
-                                                color: AppColors.electricCyan,
-                                                value: 45,
-                                                title: '45%',
-                                                radius: 18,
-                                                titleStyle: const TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white)),
-                                          ],
+                                    sections: sections,
                                   ),
                                 ),
                               ),
@@ -373,14 +438,7 @@ class AnalyticsScreen extends StatelessWidget {
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceAround,
-                                children: [
-                                  _buildTinyDonutLabel(
-                                      "Logi", AppColors.dangerRed),
-                                  _buildTinyDonutLabel(
-                                      "Enrg", AppColors.neonGreen),
-                                  _buildTinyDonutLabel(
-                                      "Tech", AppColors.electricCyan),
-                                ],
+                                children: labels,
                               ),
                             ],
                           ),
@@ -422,11 +480,13 @@ class AnalyticsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          "28.4  ▲ HIGH",
+                          "${vix.toStringAsFixed(1)}  ${vixChange >= 0 ? "▲" : "▼"} ${vix > 25.0 ? "HIGH" : (vix > 18.0 ? "MED" : "LOW")}",
                           style: GoogleFonts.spaceGrotesk(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.dangerRed),
+                              color: vix > 25.0
+                                  ? AppColors.dangerRed
+                                  : (vix > 18.0 ? AppColors.warningAmber : AppColors.neonGreen)),
                         ),
                       ],
                     ),
@@ -441,17 +501,19 @@ class AnalyticsScreen extends StatelessWidget {
                           borderData: FlBorderData(show: false),
                           lineBarsData: [
                             LineChartBarData(
-                              spots: const [
-                                FlSpot(0, 18),
-                                FlSpot(1, 24),
-                                FlSpot(2, 22),
-                                FlSpot(3, 29),
-                                FlSpot(4, 26),
-                                FlSpot(5, 32),
-                                FlSpot(6, 28.4),
+                              spots: [
+                                const FlSpot(0, 18),
+                                const FlSpot(1, 24),
+                                const FlSpot(2, 22),
+                                const FlSpot(3, 29),
+                                const FlSpot(4, 26),
+                                const FlSpot(5, 32),
+                                FlSpot(6, vix),
                               ],
                               isCurved: true,
-                              color: AppColors.dangerRed,
+                              color: vix > 25.0
+                                  ? AppColors.dangerRed
+                                  : (vix > 18.0 ? AppColors.warningAmber : AppColors.neonGreen),
                               barWidth: 2,
                               dotData: FlDotData(show: false),
                             ),
@@ -469,17 +531,17 @@ class AnalyticsScreen extends StatelessWidget {
                 children: [
                   TableRow(
                     children: [
-                      _buildStatColumn("Sharpe Ratio", "1.24", "Healthy Alpha"),
+                      _buildStatColumn("Sharpe Ratio", isRebalanced ? "1.85" : "1.24", isRebalanced ? "Optimized Alpha" : "Healthy Alpha"),
                       _buildStatColumn(
-                          "Beta Coefficient", "0.87", "Low Volatility"),
+                          "Beta Coefficient", isRebalanced ? "0.48" : "0.87", isRebalanced ? "Hedged / Low Vol" : "Low Volatility"),
                     ],
                   ),
                   TableRow(
                     children: [
                       _buildStatColumn(
-                          "Expected Alpha", "0.15", "Outperforming"),
+                          "Expected Alpha", isRebalanced ? "0.23" : "0.15", isRebalanced ? "High Outperformance" : "Outperforming"),
                       _buildStatColumn(
-                          "Max Drawdown", "-4.2%", "Protected Capital"),
+                          "Max Drawdown", isRebalanced ? "-1.8%" : "-4.2%", isRebalanced ? "Capital Shielded" : "Protected Capital"),
                     ],
                   ),
                 ],

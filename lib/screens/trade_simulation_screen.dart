@@ -19,16 +19,113 @@ import '../widgets/news_ticker.dart';
 class TradeSimulationScreen extends StatelessWidget {
   final bool isRebalanced;
   final VoidCallback onToggleRebalance;
+  final List<dynamic> trades;
+  final Map<String, dynamic> executionData;
 
   const TradeSimulationScreen({
     Key? key,
     required this.isRebalanced,
     required this.onToggleRebalance,
+    required this.trades,
+    required this.executionData,
   }) : super(key: key);
+
+  Color _getAssetColor(String asset) {
+    final upper = asset.toUpperCase();
+    if (upper.contains("LOGISTICS") || upper.contains("XYZ")) {
+      return AppColors.dangerRed;
+    } else if (upper.contains("ENERGY") || upper.contains("OIL") || upper.contains("XOM")) {
+      return AppColors.neonGreen;
+    } else if (upper.contains("TECH") || upper.contains("AAPL")) {
+      return AppColors.electricCyan;
+    }
+    // Fallbacks
+    final hash = asset.hashCode.abs();
+    final list = [
+      AppColors.electricCyan,
+      AppColors.neonGreen,
+      AppColors.dangerRed,
+      Colors.amberAccent,
+      Colors.purpleAccent,
+      Colors.orangeAccent,
+    ];
+    return list[hash % list.length];
+  }
+
+  String _formatAssetName(String asset) {
+    final parts = asset.split("_");
+    return parts.map((p) {
+      if (p.isEmpty) return "";
+      return p[0].toUpperCase() + p.substring(1).toLowerCase();
+    }).join(" ");
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final beforeMap = executionData["portfolio_before"] as Map<String, dynamic>? ?? {};
+    final afterMap = executionData["portfolio_after"] as Map<String, dynamic>? ?? {};
+    final metrics = executionData["metrics"] as Map<String, dynamic>? ?? {};
+    final riskReduction = metrics["risk_reduction"] as String? ?? "9.0%";
+    final volatilityDelta = metrics["volatility_delta"] as String? ?? "-0.43";
+    final hedgingEfficiency = metrics["hedging_efficiency"] as String? ?? "97.4%";
+
+    final beforeSections = <PieChartSectionData>[];
+    String beforeText = "";
+    beforeMap.forEach((key, val) {
+      final pct = (val["allocation_pct"] as num?)?.toDouble() ?? 0.0;
+      final name = _formatAssetName(key);
+      if (beforeText.isNotEmpty) beforeText += "\n";
+      beforeText += "$name: ${pct.toStringAsFixed(0)}%";
+      beforeSections.add(PieChartSectionData(
+        color: _getAssetColor(key),
+        value: pct,
+        title: '${pct.toStringAsFixed(0)}%',
+        radius: 20,
+        titleStyle: GoogleFonts.spaceGrotesk(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ));
+    });
+
+    if (beforeSections.isEmpty) {
+      beforeSections.add(PieChartSectionData(color: AppColors.dangerRed, value: 35, title: '35%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      beforeSections.add(PieChartSectionData(color: AppColors.neonGreen, value: 20, title: '20%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      beforeSections.add(PieChartSectionData(color: AppColors.electricCyan, value: 30, title: '30%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      beforeSections.add(PieChartSectionData(color: Colors.amberAccent, value: 15, title: '15%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      beforeText = "FedEx Corp (FDX): 35%\nExxon Mobil (XOM): 20%\nApple Inc (AAPL): 30%\nCash: 15%";
+    }
+
+    final afterSections = <PieChartSectionData>[];
+    String afterText = "";
+    afterMap.forEach((key, val) {
+      final pct = (val["allocation_pct"] as num?)?.toDouble() ?? 0.0;
+      final name = _formatAssetName(key);
+      if (afterText.isNotEmpty) afterText += "\n";
+      afterText += "$name: ${pct.toStringAsFixed(0)}%";
+      afterSections.add(PieChartSectionData(
+        color: _getAssetColor(key),
+        value: pct,
+        title: '${pct.toStringAsFixed(0)}%',
+        radius: 20,
+        titleStyle: GoogleFonts.spaceGrotesk(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ));
+    });
+
+    if (afterSections.isEmpty) {
+      afterSections.add(PieChartSectionData(color: AppColors.dangerRed, value: 15, title: '15%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      afterSections.add(PieChartSectionData(color: AppColors.neonGreen, value: 40, title: '40%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      afterSections.add(PieChartSectionData(color: AppColors.electricCyan, value: 30, title: '30%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      afterSections.add(PieChartSectionData(color: Colors.amberAccent, value: 15, title: '15%', radius: 20, titleStyle: GoogleFonts.spaceGrotesk(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)));
+      afterText = "FedEx Corp (FDX): 15%\nExxon Mobil (XOM): 40%\nApple Inc (AAPL): 30%\nCash: 15%";
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -99,41 +196,13 @@ class TradeSimulationScreen extends StatelessWidget {
                               PieChartData(
                                 sectionsSpace: 2,
                                 centerSpaceRadius: 20,
-                                sections: [
-                                  PieChartSectionData(
-                                      color: AppColors.dangerRed,
-                                      value: 35,
-                                      title: '35%',
-                                      radius: 20,
-                                      titleStyle: GoogleFonts.spaceGrotesk(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                  PieChartSectionData(
-                                      color: AppColors.neonGreen,
-                                      value: 20,
-                                      title: '20%',
-                                      radius: 20,
-                                      titleStyle: GoogleFonts.spaceGrotesk(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                  PieChartSectionData(
-                                      color: AppColors.electricCyan,
-                                      value: 45,
-                                      title: '45%',
-                                      radius: 20,
-                                      titleStyle: GoogleFonts.spaceGrotesk(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                ],
+                                sections: beforeSections,
                               ),
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                              "XYZ Logistics: 35%\nEnergy Hedging: 20%\nTech Index ETF: 45%",
+                              beforeText,
                               style:
                                   GoogleFonts.inter(fontSize: 9, height: 1.4),
                               textAlign: TextAlign.center),
@@ -187,41 +256,13 @@ class TradeSimulationScreen extends StatelessWidget {
                               PieChartData(
                                 sectionsSpace: 2,
                                 centerSpaceRadius: 20,
-                                sections: [
-                                  PieChartSectionData(
-                                      color: AppColors.dangerRed,
-                                      value: 15,
-                                      title: '15%',
-                                      radius: 20,
-                                      titleStyle: GoogleFonts.spaceGrotesk(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                  PieChartSectionData(
-                                      color: AppColors.neonGreen,
-                                      value: 40,
-                                      title: '40%',
-                                      radius: 20,
-                                      titleStyle: GoogleFonts.spaceGrotesk(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                  PieChartSectionData(
-                                      color: AppColors.electricCyan,
-                                      value: 45,
-                                      title: '45%',
-                                      radius: 20,
-                                      titleStyle: GoogleFonts.spaceGrotesk(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                ],
+                                sections: afterSections,
                               ),
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                              "XYZ Logistics: 15%\nEnergy Hedging: 40%\nTech Index ETF: 45%",
+                              afterText,
                               style:
                                   GoogleFonts.inter(fontSize: 9, height: 1.4),
                               textAlign: TextAlign.center),
@@ -261,7 +302,9 @@ class TradeSimulationScreen extends StatelessWidget {
                         const PulsingIndicator(color: Colors.green, size: 6),
                         const SizedBox(width: 8),
                         Text(
-                          "TERMINAL STAGE 1 READY...",
+                          trades.isNotEmpty 
+                              ? "LIVE TERMINAL PORTFOLIO SYNC..." 
+                              : "TERMINAL STAGE 1 READY...",
                           style: GoogleFonts.spaceGrotesk(
                               color: Colors.green,
                               fontSize: 10,
@@ -270,28 +313,55 @@ class TradeSimulationScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    _buildTerminalLine(
-                        "11:01:23",
-                        "SELL",
-                        "XYZ Logistics",
-                        "50 units",
-                        "@ \$48.20",
-                        "-\$2,410.00",
-                        Colors.redAccent),
-                    const SizedBox(height: 6),
-                    _buildTerminalLine(
-                        "11:02:05",
-                        "BUY ",
-                        "Energy Fund  ",
-                        "30 units",
-                        "@ \$67.80",
-                        "+\$2,034.00",
-                        Colors.greenAccent),
+                    if (trades.isNotEmpty) ...[
+                      for (var i = 0; i < trades.length; i++) ...[
+                        (() {
+                          final t = trades[i];
+                          final action = t["action"] ?? "BUY";
+                          final asset = t["asset"] ?? "";
+                          final qtyStr = "${(t["quantity"] as num?)?.toStringAsFixed(1) ?? "0"} units";
+                          final priceStr = "@ \$${(t["exec_price"] as num?)?.toStringAsFixed(2) ?? "0.00"}";
+                          final valStr = "${action == "BUY" ? "+" : "-"}\$${(t["delta_value"] as num?)?.toStringAsFixed(2) ?? "0.00"}";
+                          
+                          // Format timestamp to hh:mm:ss
+                          String timeStr = "11:00:00";
+                          final rawTs = t["timestamp"] ?? "";
+                          if (rawTs.isNotEmpty) {
+                            try {
+                              final parsed = DateTime.parse(rawTs).toLocal();
+                              timeStr = "${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}:${parsed.second.toString().padLeft(2, '0')}";
+                            } catch (_) {}
+                          }
+
+                          return _buildTerminalLine(
+                            timeStr,
+                            action,
+                            asset,
+                            qtyStr,
+                            priceStr,
+                            valStr,
+                            action == "BUY" ? Colors.greenAccent : Colors.redAccent,
+                          );
+                        })(),
+                        if (i < trades.length - 1) const SizedBox(height: 6),
+                      ]
+                    ] else ...[
+                      _buildTerminalLine(
+                          "",
+                          "SYSTEM",
+                          "No active trades. Run Agent Analysis to execute simulation.",
+                          "",
+                          "",
+                          "",
+                          AppColors.electricCyan),
+                    ],
                     const SizedBox(height: 10),
                     const Divider(color: Colors.white12),
                     const SizedBox(height: 4),
                     Text(
-                      ">> ALL ORDERS SETTLED VIA LIQUIDITY POOL PORT A.\n>> MARGIN RATIO ADEQUATE. REDUCTION OF LOGISTICS EXPOSURE CONFIRMED.",
+                      trades.isNotEmpty 
+                          ? ">> ALL TRADES RECORDED SECURELY IN LIVE FIRESTORE DATABASE.\n>> SYNC STATE COMPLETE. RISK MARGIN WITHIN NOMINAL RANGE."
+                          : ">> ALL ORDERS SETTLED VIA LIQUIDITY POOL PORT A.\n>> MARGIN RATIO ADEQUATE. REDUCTION OF LOGISTICS EXPOSURE CONFIRMED.",
                       style: GoogleFonts.spaceGrotesk(
                           color: Colors.grey, fontSize: 9),
                     ),
@@ -361,11 +431,11 @@ class TradeSimulationScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildPnlIndicator(
-                        "Risk Reduction", "9.0%", AppColors.electricCyan),
+                        "Risk Reduction", riskReduction, AppColors.electricCyan),
                     _buildPnlIndicator(
-                        "Volatility Delta", "-0.43", AppColors.neonGreen),
+                        "Volatility Delta", volatilityDelta, AppColors.neonGreen),
                     _buildPnlIndicator(
-                        "Hedging Efficiency", "97.4%", AppColors.warningAmber),
+                        "Hedging Efficiency", hedgingEfficiency, AppColors.warningAmber),
                   ],
                 ),
               ),
