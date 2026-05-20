@@ -1,0 +1,26 @@
+# Flutter & Dart generated files
+.dart_tool/
+.packages
+.pub/
+build/
+.idea/
+android/app/debug.keystore
+ios/Pods/
+
+# Xcode
+DerivedData/
+
+# VS Code
+.vscode/
+
+# Pubspec lock (optional)
+pubspec.lock
+
+# Project metadata
+.metadata
+
+# Environment variable files
+# Ensure any files containing sensitive environment variables are not tracked
+.env
+.env.*
+.envrc
